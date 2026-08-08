@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz Game</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #6a82fb, #fc5c7d);
+    background-size: 200% 200%; animation: gradientShift 10s ease infinite;
+    font-family: 'Segoe UI', Arial, sans-serif; padding: 20px;
+  }
+  @keyframes gradientShift { 0%,100%{background-position:0% 50%;} 50%{background-position:100% 50%;} }
+
+  .card {
+    background: #fff; border-radius: 20px; padding: 32px 28px;
+    max-width: 460px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  }
+  h1 { text-align: center; color: #4a3f8f; font-size: 1.5rem; margin: 0 0 6px; }
+  .subtitle { text-align: center; color: #999; font-size: 0.82rem; margin-bottom: 20px; }
+
+  input[type=text] {
+    width: 100%; padding: 12px 14px; border: 2px solid #e0dcf5; border-radius: 10px;
+    font-size: 1rem; outline: none; margin-bottom: 10px;
+  }
+  input[type=text]:focus { border-color: #6a82fb; }
+
+  .btn {
+    width: 100%; padding: 13px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, #6a82fb, #fc5c7d); color: #fff;
+    font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 6px;
+  }
+  .btn:hover { filter: brightness(1.05); }
+  .btn.secondary { background: #f1f0fa; color: #4a3f8f; }
+
+  .question-num { font-size: 0.78rem; color: #999; margin-bottom: 4px; }
+  .question-text { font-size: 1.15rem; color: #333; margin-bottom: 16px; font-weight: 600; }
+  .option {
+    display: block; width: 100%; text-align: left; padding: 12px 14px;
+    margin-bottom: 8px; border: 2px solid #e0dcf5; border-radius: 10px;
+    background: #fff; cursor: pointer; font-size: 0.95rem; color: #333;
+  }
+  .option:hover { border-color: #6a82fb; background: #f7f8ff; }
+  .option.correct { border-color: #4caf50; background: #e8f7ea; }
+  .option.wrong { border-color: #e53935; background: #fdecea; }
+
+  .score-display { text-align: center; }
+  .score-display .big-score { font-size: 2.6rem; font-weight: bold; color: #4a3f8f; margin: 10px 0; }
+
+  .leaderboard-row {
+    display: flex; justify-content: space-between; padding: 8px 4px;
+    border-bottom: 1px solid #f0f0f0; font-size: 0.9rem;
+  }
+  .leaderboard-row.top1 { font-weight: bold; color: #d6a100; }
+  .hidden { display: none !important; }
+  .status-msg { font-size: 0.8rem; text-align: center; color: #999; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <div id="startScreen">
+    <h1>🧠 Quiz Game</h1>
+    <div class="subtitle">Answer 10 questions, then save your score to the weekly leaderboard</div>
+    <input type="text" id="playerName" placeholder="Enter your name" maxlength="30">
+    <button class="btn" onclick="startQuiz()">Start Quiz</button>
+    <button class="btn secondary" onclick="showLeaderboard()">View Leaderboard</button>
+  </div>
+
+  <div id="quizScreen" class="hidden">
+    <div class="question-num" id="questionNum"></div>
+    <div class="question-text" id="questionText"></div>
+    <div id="optionsArea"></div>
+  </div>
+
+  <div id="resultScreen" class="hidden">
+    <div class="score-display">
+      <h1>Quiz Complete!</h1>
+      <div class="big-score" id="finalScore"></div>
+      <button class="btn" onclick="submitScore()">Save My Score</button>
+      <div class="status-msg" id="submitStatus"></div>
+      <button class="btn secondary" onclick="showLeaderboard()">View Leaderboard</button>
+      <button class="btn secondary" onclick="resetToStart()">Play Again</button>
+    </div>
+  </div>
+
+  <div id="leaderboardScreen" class="hidden">
+    <h1>🏆 Leaderboard</h1>
+    <div class="subtitle">Scores from the last 7 days</div>
+    <div id="leaderboardList"></div>
+    <button class="btn secondary" onclick="resetToStart()" style="margin-top:14px;">Back</button>
+  </div>
+
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+// Change this if your backend runs somewhere other than localhost:5000
+const API_BASE = "http://localhost:5000";
+
+/* ================= QUESTIONS ================= */
+const QUESTIONS = [
+  // ===== Current Affairs (8) =====
+  { q: "An 18-year-old just broke a 306-year-old Guinness World Record — for what achievement?", options: ["Youngest male professor", "Youngest CEO", "Youngest astronaut", "Youngest Olympic gold medalist"], correct: 0, category: "Current Affairs", difficulty: "Easy" },
+  { q: "Which cricket legend retired from international cricket in July 2026 after 195 international matches?", options: ["Virat Kohli", "Ajinkya Rahane", "Rohit Sharma", "Cheteshwar Pujara"], correct: 1, category: "Current Affairs", difficulty: "Easy" },
+  { q: "India's Navy inducted a new indigenous diving support vessel whose name means 'skilled' — what is it called?", options: ["Nipun", "Kalvari", "Vikrant", "Arihant"], correct: 0, category: "Current Affairs", difficulty: "Medium" },
+  { q: "Who became the first woman in IAF history to clear the Fighter Combat Leader course?", options: ["Avani Chaturvedi", "Bhawana Kanth", "Shivangi Singh", "Mohana Singh"], correct: 1, category: "Current Affairs", difficulty: "Medium" },
+  { q: "The Union Cabinet approved a ₹36,441 crore outlay in 2026 to expand which sports scheme?", options: ["Khelo India", "Fit India", "TOPS", "Target Olympic Podium"], correct: 0, category: "Current Affairs", difficulty: "Medium" },
+  { q: "Who invented both the first web browser and the first web server, back in 1990?", options: ["Bill Gates", "Tim Berners-Lee", "Steve Jobs", "Vint Cerf"], correct: 1, category: "Current Affairs", difficulty: "Hard" },
+  { q: "An Indian-origin NASA astronaut completed a spacewalk outside which structure in August 2026?", options: ["Tiangong Space Station", "International Space Station", "Hubble Telescope", "Artemis Base Camp"], correct: 1, category: "Current Affairs", difficulty: "Complex" },
+  { q: "August 9 marks the anniversary of which grim WWII event?", options: ["Hiroshima bombing", "Nagasaki bombing", "Pearl Harbor attack", "D-Day invasion"], correct: 1, category: "Current Affairs", difficulty: "Complex" },
+
+  // ===== General Knowledge (5) =====
+  { q: "Who is known as the Father of the Nation in India?", options: ["Jawaharlal Nehru", "Mahatma Gandhi", "Subhas Chandra Bose", "Sardar Patel"], correct: 1, category: "GK", difficulty: "Easy" },
+  { q: "What is the national bird of India?", options: ["Sparrow", "Peacock", "Eagle", "Parrot"], correct: 1, category: "GK", difficulty: "Easy" },
+  { q: "Which is the longest river in the world?", options: ["Amazon", "Nile", "Yangtze", "Mississippi"], correct: 1, category: "GK", difficulty: "Medium" },
+  { q: "In cricket, can the same bowler bowl two overs in a row?", options: ["Yes, always", "No, never allowed", "Only in T20", "Only if captain agrees"], correct: 1, category: "GK", difficulty: "Medium" },
+  { q: "Which Indian city is nicknamed the 'Silicon Valley of India'?", options: ["Hyderabad", "Pune", "Bengaluru", "Chennai"], correct: 2, category: "GK", difficulty: "Complex" },
+
+  // ===== Computer Basics + Advanced (10) =====
+  { q: "What does CPU stand for?", options: ["Central Processing Unit", "Central Program Unit", "Computer Personal Unit", "Central Processor User"], correct: 0, category: "Computer", difficulty: "Easy" },
+  { q: "Which key deletes a character to the left of the cursor?", options: ["Delete", "Backspace", "Shift", "Tab"], correct: 1, category: "Computer", difficulty: "Easy" },
+  { q: "What does 'www' stand for?", options: ["World Wide Web", "World Web Wide", "Wide World Web", "Web World Wide"], correct: 0, category: "Computer", difficulty: "Easy" },
+  { q: "Which of these is an operating system?", options: ["Windows", "Photoshop", "Excel", "Chrome"], correct: 0, category: "Computer", difficulty: "Easy" },
+  { q: "What does RAM stand for?", options: ["Random Access Memory", "Read Access Memory", "Random Active Memory", "Read Active Module"], correct: 0, category: "Computer", difficulty: "Medium" },
+  { q: "Which language is used to style web pages?", options: ["HTML", "CSS", "Python", "Java"], correct: 1, category: "Computer", difficulty: "Medium" },
+  { q: "What does the shortcut Ctrl+V do?", options: ["Copy", "Cut", "Paste", "Undo"], correct: 2, category: "Computer", difficulty: "Medium" },
+  { q: "Which data structure follows First-In-First-Out (FIFO) order?", options: ["Stack", "Queue", "Tree", "Graph"], correct: 1, category: "Computer", difficulty: "Hard" },
+  { q: "What does HTTP stand for?", options: ["HyperText Transfer Protocol", "High Transfer Text Protocol", "HyperText Technical Protocol", "Home Transfer Text Protocol"], correct: 0, category: "Computer", difficulty: "Complex" },
+  { q: "Which sorting algorithm splits a list in half repeatedly until it can't anymore?", options: ["Bubble Sort", "Merge Sort", "Insertion Sort", "Selection Sort"], correct: 1, category: "Computer", difficulty: "Complex" },
+
+  // ===== Aptitude (5) =====
+  { q: "If a train travels 60 km in 1 hour, how far does it travel in 3 hours at the same speed?", options: ["120 km", "150 km", "180 km", "200 km"], correct: 2, category: "Aptitude", difficulty: "Easy" },
+  { q: "A shopkeeper buys a pen for ₹10 and sells it for ₹15. What is his profit?", options: ["₹3", "₹5", "₹7", "₹10"], correct: 1, category: "Aptitude", difficulty: "Easy" },
+  { q: "Find the odd one out: Apple, Banana, Carrot, Mango", options: ["Apple", "Banana", "Carrot", "Mango"], correct: 2, category: "Aptitude", difficulty: "Medium" },
+  { q: "If CAT is coded as DBU (each letter shifted by +1), how would DOG be coded?", options: ["EPH", "EQH", "FPH", "EPI"], correct: 0, category: "Aptitude", difficulty: "Medium" },
+  { q: "A is twice as old as B. Five years ago, A was three times as old as B. What is A's current age?", options: ["15", "20", "25", "30"], correct: 1, category: "Aptitude", difficulty: "Complex" },
+
+  // ===== Science (5) =====
+  { q: "What planet do we live on?", options: ["Mars", "Earth", "Venus", "Jupiter"], correct: 1, category: "Science", difficulty: "Easy" },
+  { q: "What gas do humans need to breathe to survive?", options: ["Nitrogen", "Oxygen", "Carbon Dioxide", "Hydrogen"], correct: 1, category: "Science", difficulty: "Easy" },
+  { q: "What is the 'powerhouse of the cell' called?", options: ["Nucleus", "Mitochondria", "Ribosome", "Cytoplasm"], correct: 1, category: "Science", difficulty: "Medium" },
+  { q: "What is the chemical formula for water?", options: ["CO2", "H2O", "O2", "NaCl"], correct: 1, category: "Science", difficulty: "Medium" },
+  { q: "Which invisible force keeps planets orbiting the sun?", options: ["Magnetism", "Gravity", "Friction", "Inertia"], correct: 1, category: "Science", difficulty: "Hard" },
+
+  // ===== Logical Reasoning (5) =====
+  { q: "Complete the sequence: 2, 4, 6, 8, ?", options: ["9", "10", "11", "12"], correct: 1, category: "Logical Reasoning", difficulty: "Easy" },
+  { q: "If all cats are animals, and Tom is a cat, is Tom an animal?", options: ["Yes", "No", "Cannot say", "Sometimes"], correct: 0, category: "Logical Reasoning", difficulty: "Easy" },
+  { q: "Find the odd one out: Circle, Square, Triangle, Sphere", options: ["Circle", "Square", "Triangle", "Sphere"], correct: 3, category: "Logical Reasoning", difficulty: "Medium" },
+  { q: "If today is Wednesday, what day will it be after 100 days?", options: ["Thursday", "Friday", "Saturday", "Sunday"], correct: 1, category: "Logical Reasoning", difficulty: "Hard" },
+  { q: "Five friends sit in a row: A is left of B, C is right of B, D is between A and B, E is at the far right. Who sits in the middle?", options: ["A", "B", "C", "D"], correct: 1, category: "Logical Reasoning", difficulty: "Complex" },
+
+  // ===== Geography (4) =====
+  { q: "Which is the largest continent by area?", options: ["Africa", "Asia", "Europe", "Antarctica"], correct: 1, category: "Geography", difficulty: "Easy" },
+  { q: "Which is the smallest country in the world?", options: ["Monaco", "Vatican City", "San Marino", "Malta"], correct: 1, category: "Geography", difficulty: "Easy" },
+  { q: "Which is the largest hot desert in the world?", options: ["Sahara", "Gobi", "Kalahari", "Thar"], correct: 0, category: "Geography", difficulty: "Medium" },
+  { q: "Mount Everest is located in which mountain range?", options: ["Andes", "Alps", "Himalayas", "Rockies"], correct: 2, category: "Geography", difficulty: "Complex" },
+
+  // ===== English (4) =====
+  { q: "Choose the word that means the same as 'Happy'.", options: ["Sad", "Joyful", "Angry", "Tired"], correct: 1, category: "English", difficulty: "Easy" },
+  { q: "Choose the opposite of 'Brave'.", options: ["Bold", "Cowardly", "Strong", "Fearless"], correct: 1, category: "English", difficulty: "Easy" },
+  { q: "Choose the correctly spelled word.", options: ["Neccessary", "Necessary", "Neccessery", "Necessery"], correct: 1, category: "English", difficulty: "Medium" },
+  { q: "Which sentence uses an apostrophe correctly?", options: ["It's raining", "Its' raining", "Its raining outside now'", "I'ts raining"], correct: 0, category: "English", difficulty: "Hard" },
+
+  // ===== Sports (4) =====
+  { q: "How many players are on a football (soccer) team on the field at once?", options: ["9", "10", "11", "12"], correct: 2, category: "Sports", difficulty: "Easy" },
+  { q: "Winning all four majors in one calendar year completes a 'Grand Slam' — in which sport?", options: ["Cricket", "Tennis", "Badminton", "Golf"], correct: 1, category: "Sports", difficulty: "Easy" },
+  { q: "The modern Olympics made their comeback in 1896 — in which city?", options: ["Paris", "London", "Athens", "Rome"], correct: 2, category: "Sports", difficulty: "Complex" },
+  { q: "The Olympic Games are held once every how many years?", options: ["2", "3", "4", "5"], correct: 2, category: "Sports", difficulty: "Complex" }
+];
+
+/* ================= STATE ================= */
+let currentQ = 0;
+let score = 0;
+let playerName = "";
+
+/* ================= SCREENS ================= */
+function showScreen(id) {
+  ['startScreen', 'quizScreen', 'resultScreen', 'leaderboardScreen'].forEach(s => {
+    document.getElementById(s).classList.add('hidden');
+  });
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function resetToStart() {
+  currentQ = 0; score = 0;
+  document.getElementById('submitStatus').textContent = '';
+  showScreen('startScreen');
+}
+
+/* ================= QUIZ FLOW ================= */
+function startQuiz() {
+  const nameInput = document.getElementById('playerName').value.trim();
+  if (!nameInput) { alert('Please enter your name first.'); return; }
+  playerName = nameInput;
+  currentQ = 0; score = 0;
+  showScreen('quizScreen');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const q = QUESTIONS[currentQ];
+  document.getElementById('questionNum').textContent = `Question ${currentQ + 1} of ${QUESTIONS.length}`;
+  document.getElementById('questionText').textContent = q.q;
+
+  const area = document.getElementById('optionsArea');
+  area.innerHTML = '';
+  q.options.forEach((opt, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'option';
+    btn.textContent = opt;
+    btn.onclick = () => selectAnswer(idx);
+    area.appendChild(btn);
+  });
+}
+
+function selectAnswer(idx) {
+  const q = QUESTIONS[currentQ];
+  const buttons = document.querySelectorAll('.option');
+  buttons.forEach(b => b.onclick = null); // lock further clicks
+
+  buttons[q.correct].classList.add('correct');
+  if (idx !== q.correct) buttons[idx].classList.add('wrong');
+  if (idx === q.correct) score++;
+
+  setTimeout(() => {
+    currentQ++;
+    if (currentQ < QUESTIONS.length) {
+      renderQuestion();
+    } else {
+      showResult();
+    }
+  }, 900);
+}
+
+function showResult() {
+  showScreen('resultScreen');
+  document.getElementById('finalScore').textContent = `${score} / ${QUESTIONS.length}`;
+}
+
+/* ================= BACKEND CALLS ================= */
+async function submitScore() {
+  const statusEl = document.getElementById('submitStatus');
+  statusEl.textContent = 'Saving...';
+  try {
+    const res = await fetch(`${API_BASE}/api/submit_score`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: playerName, score: score })
+    });
+    if (!res.ok) throw new Error('Server error');
+    statusEl.textContent = '✅ Score saved to the leaderboard!';
+  } catch (err) {
+    statusEl.textContent = '⚠️ Could not reach the server. Is the backend running?';
+  }
+}
+
+async function showLeaderboard() {
+  showScreen('leaderboardScreen');
+  const listEl = document.getElementById('leaderboardList');
+  listEl.innerHTML = '<div class="status-msg">Loading...</div>';
+  try {
+    const res = await fetch(`${API_BASE}/api/leaderboard`);
+    if (!res.ok) throw new Error('Server error');
+    const data = await res.json();
+    if (data.leaderboard.length === 0) {
+      listEl.innerHTML = '<div class="status-msg">No scores yet this week — be the first!</div>';
+      return;
+    }
+    listEl.innerHTML = data.leaderboard.map((entry, i) => `
+      <div class="leaderboard-row ${i === 0 ? 'top1' : ''}">
+        <span>${i + 1}. ${entry.name}</span>
+        <span>${entry.score} / ${QUESTIONS.length}</span>
+      </div>
+    `).join('');
+  } catch (err) {
+    listEl.innerHTML = '<div class="status-msg">⚠️ Could not reach the server. Is the backend running?</div>';
+  }
+}
+</script>
+</body>
+</html>
